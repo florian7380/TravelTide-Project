@@ -1,0 +1,53 @@
+query = """
+WITH
+
+sessions_2023 AS (
+  SELECT *
+  FROM sessions s
+  WHERE s.session_start > '2023-01-04'
+),
+
+filtered_users AS (
+  SELECT
+    user_id,
+    COUNT(*) AS session_count
+  FROM sessions_2023 s
+  GROUP BY user_id
+  HAVING COUNT(*) > 7
+),
+
+session_base AS (
+  SELECT
+    s.session_start, s.session_end,
+    s.page_clicks,
+    s.flight_discount_amount,
+    s.hotel_discount_amount,
+    s.flight_booked::int, s.hotel_booked::int,
+    s.cancellation::int,
+    CASE u.gender
+      WHEN 'M' THEN 2
+      WHEN 'F' THEN 1
+      WHEN 'O' THEN 0
+      ELSE NULL
+    END AS gender,
+    DATE_PART('year', AGE(u.birthdate))::int AS age,
+    u.married::int, u.has_children::int,
+    f.return_flight_booked::int,
+    f.checked_bags,
+    h.nights, h.rooms,
+    h.hotel_per_room_usd AS hotel_price_per_room_night_usd
+
+  FROM sessions_2023 s
+  INNER JOIN users u ON s.user_id = u.user_id
+  LEFT JOIN flights f ON s.trip_id = f.trip_id
+  LEFT JOIN hotels h ON s.trip_id = h.trip_id
+  WHERE
+      s.user_id IN (SELECT user_id FROM filtered_users)
+    AND
+      (h.nights IS NULL OR h.nights > 0)
+    AND
+      ((h.check_in_time IS NULL AND h.check_out_time IS NULL) OR h.check_out_time > h.check_in_time)
+)
+
+SELECT * FROM session_base;
+"""
